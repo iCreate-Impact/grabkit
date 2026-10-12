@@ -1,0 +1,68 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GrabKit</title><meta name="referrer" content="no-referrer">
+<style>
+:root{--bg:#0d0f12;--pn:#14171c;--ln:#232831;--tx:#e7e9ec;--mu:#8b93a0;--ac:#ffb454;--er:#ff6b6b;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);padding:48px 20px 80px}
+main{max-width:760px;margin:0 auto}h1{font-size:15px;font-weight:600;color:var(--mu);margin:0 0 20px;letter-spacing:.02em}
+.bar0{display:flex;gap:10px;align-items:flex-start;background:var(--pn);border:1px solid var(--ln);border-radius:14px;padding:14px;transition:border-color .15s}
+.bar0:focus-within{border-color:var(--ac)}
+textarea{flex:1;background:none;border:0;outline:0;resize:none;color:var(--tx);font:inherit;font-size:19px;line-height:1.4;min-height:28px;max-height:200px}
+button{font:inherit;background:var(--ac);color:#1a1205;border:0;border-radius:9px;padding:9px 16px;font-weight:600;cursor:pointer}
+button:disabled{opacity:.5;cursor:default}button.g{background:none;color:var(--mu);padding:4px 8px;font-weight:400}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+#hint{margin:10px 2px 26px;font-size:13px;color:var(--mu);min-height:20px}
+.badge{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600;border:1px solid var(--ln);color:var(--tx)}
+.badge.youtube{border-color:#ff4e45}.badge.tiktok{border-color:#25f4ee}.badge.instagram{border-color:#e1306c}.badge.facebook{border-color:#4a8cff}.badge.x{border-color:#e7e9ec}
+.card{background:var(--pn);border:1px solid var(--ln);border-radius:12px;padding:16px;margin-bottom:14px}
+.hd{display:flex;gap:10px;align-items:center}.ti{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.er{color:var(--er);font-size:14px;margin-top:10px}.mu{color:var(--mu);font-size:13px}
+.items{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}
+.it{position:relative;width:88px;height:88px;border-radius:8px;overflow:hidden;background:#0a0c0f;cursor:pointer;border:2px solid transparent}
+.it:has(input:checked){border-color:var(--ac)}.it img{width:100%;height:100%;object-fit:cover}.it input{position:absolute;top:6px;left:6px}
+.it span{position:absolute;right:4px;bottom:4px;font-size:11px;background:#000a;padding:1px 5px;border-radius:4px}
+.ctl{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+select{background:var(--bg);color:var(--tx);border:1px solid var(--ln);border-radius:8px;padding:8px 10px;font:inherit}
+.pg{height:6px;background:var(--bg);border-radius:9px;margin-top:14px;overflow:hidden;display:none}.pg i{display:block;height:100%;width:0;background:var(--ac);transition:width .2s}
+h2{font-size:14px;color:var(--mu);margin:40px 0 10px;font-weight:600}.hi{font-size:13px;padding:8px 0;border-top:1px solid var(--ln);display:flex;gap:10px}
+.hi b{flex:1;font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style></head><body><main>
+<h1>GrabKit</h1>
+<div class="bar0"><textarea id="in" rows="1" placeholder="Paste links, one per line" autofocus aria-label="Media links"></textarea><button id="go">Fetch</button></div>
+<div id="hint">YouTube, TikTok, Instagram, X and Facebook. Public posts only.</div>
+<div id="list"></div><h2 id="hh" hidden>This session</h2><div id="hist"></div>
+</main><script>
+const $=s=>document.querySelector(s),PL={youtube:/youtu\.?be/i,tiktok:/tiktok\.com/i,instagram:/instagram\.com/i,facebook:/(facebook|fb)\.(com|watch)/i,x:/(twitter|x)\.com/i};
+const NM={youtube:'YouTube',tiktok:'TikTok',instagram:'Instagram',facebook:'Facebook',x:'X'},det=u=>Object.keys(PL).find(k=>PL[k].test(u));
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const links=()=>[...new Set($('#in').value.split(/\s+/).filter(u=>/^https?:\/\//i.test(u)))];
+const SEEN=new Set();
+async function api(p,b){const r=await fetch(p,b&&{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.message||'Request failed ('+r.status+')');return j}
+const hint=()=>{const l=links(),h=$('#hint');if(!l.length)return;h.innerHTML=l.length>1?`<span class="badge">${l.length} links</span> queued one after another`:(det(l[0])?`<span class="badge ${det(l[0])}">${NM[det(l[0])]}</span> detected`:'<span class="mu">Unknown host, will try to resolve the link</span>')};
+$('#in').addEventListener('input',e=>{e.target.style.height='auto';e.target.style.height=e.target.scrollHeight+'px';hint()});
+$('#in').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submit()}});$('#go').onclick=submit;
+async function submit(){const l=links();if(!l.length)return;$('#in').value='';$('#in').style.height='auto';$('#go').disabled=true;for(const u of l)await card(u);$('#go').disabled=false}
+async function card(url){if(SEEN.has(url))return;const c=document.createElement('div');c.className='card';c.innerHTML=`<div class="hd"><span class="badge ${det(url)||''}">${NM[det(url)]||'?'}</span><span class="ti mu">${esc(url)}</span><span class="mu">Fetching…</span></div>`;$('#list').prepend(c);
+ try{const d=await api('/api/info',{url});render(c,url,d);SEEN.add(url)}catch(e){c.querySelector('.hd span:last-child').textContent='';c.insertAdjacentHTML('beforeend',`<div class="er">${esc(e.message)}</div>`)}}
+function render(c,url,d){const allImg=d.items.every(i=>i.type==='image'),qs=[...new Set(d.items.flatMap(i=>i.qualities))].sort((a,b)=>b-a);
+ c.innerHTML=`<div class="hd"><span class="badge ${d.platform}">${NM[d.platform]}</span><span class="ti" title="${esc(d.title)}">${esc(d.title)}</span><button class="g" data-all hidden>Toggle all</button></div>
+ <div class="items">${d.items.map((i,n)=>`<label class="it"><input type="checkbox" data-i="${n}" checked aria-label="Item ${n+1}"><img src="${esc(i.thumb)}" referrerpolicy="no-referrer" alt=""><span>${i.type}</span></label>`).join('')}</div>
+ <div class="ctl"><select data-f>${allImg?'':'<option>mp4</option><option>mp3</option>'}<option>jpg</option><option>webp</option></select>
+ <select data-q>${qs.length?'<option value="">Best</option>'+qs.map(q=>`<option value="${q}">${q}p</option>`).join(''):'<option value="">Best</option>'}</select><button data-d>Download</button><span class="mu" data-s></span></div>
+ <div class="pg"><i></i></div><div class="er" hidden></div>`;
+ const f=c.querySelector('[data-f]'),q=c.querySelector('[data-q]'),b=c.querySelector('[data-d]'),boxes=()=>[...c.querySelectorAll('[data-i]')];
+ const sync=()=>{q.hidden=f.value!=='mp4'||!qs.length;const n=boxes().filter(x=>x.checked).length;b.disabled=!n;b.textContent='Download'+(d.items.length>1?` (${n})`:'')};
+ f.onchange=sync;c.addEventListener('change',sync);sync();const ta=c.querySelector('[data-all]');ta.hidden=d.items.length<2;ta.onclick=()=>{const on=!boxes().every(x=>x.checked);boxes().forEach(x=>x.checked=on);sync()};
+ b.onclick=()=>run(c,url,d,f.value,q.value?+q.value:null,boxes().filter(x=>x.checked).map(x=>+x.dataset.i))}
+async function run(c,url,d,ext,quality,idx){const bar=c.querySelector('.pg'),fill=bar.firstElementChild,st=c.querySelector('[data-s]'),er=c.querySelector('.er'),b=c.querySelector('[data-d]');
+ er.hidden=true;bar.style.display='block';b.disabled=true;const set=(p,t)=>{fill.style.width=p+'%';st.textContent=t};
+ try{for(let k=0;k<idx.length;k++){const tag=idx.length>1?`${k+1}/${idx.length} · `:'',kind=ext==='mp4'?'video':ext==='mp3'?'audio':'image';
+  const p=await api('/api/prepare',{url,kind,ext,quality,index:idx[k]});let href=p.href,off=0,span=100;
+  if(p.mode==='job'){off=0;span=50;for(;;){const j=await api('/api/job/'+p.id);if(j.state==='error')throw new Error(j.error);set(j.pct/2,`${tag}${j.label} ${Math.round(j.pct)}%`);if(j.state==='done')break;await new Promise(r=>setTimeout(r,500))}href='/api/file/'+p.id}
+  const r=await fetch(href);if(!r.ok)throw new Error((await r.json().catch(()=>({}))).message||'Download failed');const tot=+r.headers.get('content-length')||0,rd=r.body.getReader(),parts=[];let got=0;
+  for(;;){const{done,value}=await rd.read();if(done)break;parts.push(value);got+=value.length;const mb=(got/1048576).toFixed(1);if(tot){const f=got/tot;set((p.mode==='job'?50:0)+f*span,`${tag}Saving ${Math.round(f*100)}% · ${mb} MB`)}else set(p.mode==='job'?75:50,`${tag}Saving ${mb} MB`)}
+  const blob=new Blob(parts),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=p.name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4e4);hist(p.name,d.platform,blob.size)}
+  set(100,'Done')}catch(e){er.textContent=e.message;er.hidden=false;st.textContent=''}b.disabled=false}
+const H=JSON.parse(sessionStorage.getItem('gk')||'[]');function hist(n,p,s){H.unshift({n,p,s,t:new Date().toLocaleTimeString()});sessionStorage.setItem('gk',JSON.stringify(H.slice(0,50)));drawH()}
+function drawH(){$('#hh').hidden=!H.length;$('#hist').innerHTML=H.map(h=>`<div class="hi"><span class="badge ${h.p}">${NM[h.p]}</span><b title="${esc(h.n)}">${esc(h.n)}</b><span class="mu">${(h.s/1048576).toFixed(1)} MB · ${h.t}</span></div>`).join('')}drawH();
+</script></body></html>

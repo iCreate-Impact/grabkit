@@ -1,0 +1,65 @@
+# ─── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# virtualenvs
+.venv/
+venv/
+env/
+ENV/
+
+# yt-dlp cache / cookies
+*.part
+*.ytdl
+cookies.txt
+
+# ─── Android ──────────────────────────────────────────────────────────────────
+grabkit-android/.gradle/
+grabkit-android/build/
+grabkit-android/app/build/
+grabkit-android/local.properties
+grabkit-android/*.iml
+
+# Chaquopy build outputs
+grabkit-android/app/src/main/python/__pycache__/
+
+# Generated / signed APKs and AABs — never commit these
+grabkit-android/**/*.apk
+grabkit-android/**/*.aab
+grabkit-android/**/*.keystore
+grabkit-android/**/*.jks
+
+# ─── IDEs ─────────────────────────────────────────────────────────────────────
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ─── Secrets / env ────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+secrets/

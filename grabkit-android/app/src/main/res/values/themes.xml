@@ -1,0 +1,8 @@
+<resources>
+    <!-- Dark only. windowBackground avoids a white flash before Compose draws. -->
+    <style name="Theme.GrabKit" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/gk_bg</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>
