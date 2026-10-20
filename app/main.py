@@ -12,6 +12,7 @@ UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like 
 HOSTS = {"youtube": ("youtube.com", "youtu.be"), "tiktok": ("tiktok.com",), "instagram": ("instagram.com",),
          "facebook": ("facebook.com", "fb.watch", "fb.com"), "x": ("twitter.com", "x.com")}
 STD = (1080, 720, 480, 360)
+VERSION = "0.1.4"
 CACHE, JOBS, STREAMS = {}, {}, {}
 app = FastAPI(title="GrabKit")
 
@@ -209,6 +210,9 @@ def ytdlp_info(url):
         hs = [f["height"] for f in vf if f.get("height")]  # Facebook progressive formats carry no height
         if vf or e.get("duration") or not e.get("thumbnail"): items.append({"type": "video", "thumb": e.get("thumbnail"), "maxh": max(hs or [0]), "sources": []})
         else: items.append({"type": "image", "thumb": e["thumbnail"], "sources": [{"h": 0, "url": e["thumbnail"]}]})
+    if re.search(r"fb\.watch|(?:facebook|fb)\.com/.*(?:/videos?/|/reels?/|/watch|/share/[rv]/)", url):
+        for it in items:  # a video-style Facebook URL is a video even if yt-dlp lists only a thumbnail
+            if it["type"] == "image": it.update(type="video", maxh=0, sources=[])
     if not items: raise AppError("fetch_failed", "No media found at that link.", 404)
     return {"title": i.get("title") or "Media", "thumb": i.get("thumbnail") or items[0]["thumb"], "items": items, "engine": "ytdlp", "pl": pl}
 
@@ -275,7 +279,7 @@ class PrepReq(BaseModel):
 
 
 @app.get("/api/health")
-def health(): return {"ok": True, "ffmpeg": bool(shutil.which("ffmpeg"))}
+def health(): return {"ok": True, "version": VERSION, "ffmpeg": bool(shutil.which("ffmpeg"))}
 
 
 @app.post("/api/info")

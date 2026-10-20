@@ -1,6 +1,14 @@
 # Changelog
 Every iteration of GrabKit gets an entry here (newest first).
 
+## [0.1.4] - 2026-10-20
+### Fixed
+- Facebook video still listed as a single image. Facebook URLs shaped like videos (`/videos/`, `/reel/`, `/watch`, `/share/v/`, `fb.watch`) are now always treated as video, even if yt-dlp reports only a thumbnail.
+### Added
+- Footer shows the running version and warns if ffmpeg is missing (`/api/health` now returns `version`). If the footer doesn't say v0.1.4, the old server is still running: stop it and start again.
+### Known limitations
+- Facebook quality stays "Best" (no height data).
+
 ## [0.1.3] - 2026-10-20
 ### Added
 - Favicon (`app/web/favicon.svg`): the amber download arrow from the Android launcher icon on a dark rounded square.
