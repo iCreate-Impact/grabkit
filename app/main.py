@@ -162,12 +162,14 @@ def instagram(url):
 
 
 def facebook(url):
-    with http() as c: html = c.get(url, headers={"Accept-Language": "en-US,en;q=0.9"}).text
+    html, _ = page(url, {"Accept-Language": "en-US,en;q=0.9"})
     found = {}
     for key, h in (("hd_src", 720), ("browser_native_hd_url", 720), ("playable_url_quality_hd", 720),
                    ("sd_src", 360), ("browser_native_sd_url", 360), ("playable_url", 360)):
         for m in re.finditer(r'"%s":"(https:[^"]+)"' % key, html):
             found.setdefault(h, json.loads('"' + m.group(1) + '"'))
+    for m in re.finditer(r'property="og:video(?::secure_url)?" content="([^"]+)"', html):
+        found.setdefault(360, htmllib.unescape(m.group(1)))
     if not found:
         raise AppError("private", "No public video found. The post may be private, or Facebook is showing a login wall.", 403)
     og = re.search(r'property="og:image" content="([^"]+)"', html)
@@ -203,8 +205,9 @@ def ytdlp_info(url):
     pl = bool(i.get("entries")); es = [e for e in (i.get("entries") or [i]) if e]
     items = []
     for e in es:
-        hs = [f["height"] for f in e.get("formats") or [] if f.get("height") and f.get("vcodec") != "none"]
-        if hs or not e.get("thumbnail"): items.append({"type": "video", "thumb": e.get("thumbnail"), "maxh": max(hs or [0]), "sources": []})
+        vf = [f for f in e.get("formats") or [] if f.get("vcodec") != "none" and f.get("ext") not in ("jpg", "jpeg", "png", "webp", "mhtml")]
+        hs = [f["height"] for f in vf if f.get("height")]  # Facebook progressive formats carry no height
+        if vf or e.get("duration") or not e.get("thumbnail"): items.append({"type": "video", "thumb": e.get("thumbnail"), "maxh": max(hs or [0]), "sources": []})
         else: items.append({"type": "image", "thumb": e["thumbnail"], "sources": [{"h": 0, "url": e["thumbnail"]}]})
     if not items: raise AppError("fetch_failed", "No media found at that link.", 404)
     return {"title": i.get("title") or "Media", "thumb": i.get("thumbnail") or items[0]["thumb"], "items": items, "engine": "ytdlp", "pl": pl}
@@ -247,6 +250,7 @@ def resolve(url):
             if first.code != "fetch_failed": raise first
             if second.code != "fetch_failed": raise second
             raise AppError("fetch_failed", f"Couldn't fetch that link. Native: {getattr(first, 'detail', None) or first.message} | yt-dlp: {getattr(second, 'detail', '')}"[:420], 502)
+    if p == "facebook": res["title"] = re.sub(r"^[^|]*\b(?:views|reactions)\b[^|]*\|\s*", "", res["title"])
     res["platform"] = p; res["url"] = url; CACHE[orig] = (time.time(), res)
     return res
 

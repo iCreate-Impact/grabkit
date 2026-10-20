@@ -1,6 +1,16 @@
 # Changelog
 Every iteration of GrabKit gets an entry here (newest first).
 
+## [0.1.3] - 2026-10-20
+### Added
+- Favicon (`app/web/favicon.svg`): the amber download arrow from the Android launcher icon on a dark rounded square.
+### Fixed
+- Facebook videos appearing as a single "image". The yt-dlp fallback decided "video" only when a format had a pixel height, and Facebook's progressive formats have none. A video is now any entry with a non-image video format or a duration.
+- Facebook native extractor now fetches with the Chrome-fingerprint client and falls back to the `og:video` meta tag.
+- yt-dlp-sourced Facebook titles also lose the "views · reactions |" prefix.
+### Known limitations
+- Facebook quality can't be chosen when formats carry no height; it downloads at Best.
+
 ## [0.1.2] - 2026-10-11
 ### Fixed
 - TikTok links failing with yt-dlp "Unexpected response from webpage request": TikTok rejects non-browser TLS fingerprints. Native page fetch and yt-dlp now impersonate Chrome via `curl_cffi` (added to requirements; non-YouTube only).
