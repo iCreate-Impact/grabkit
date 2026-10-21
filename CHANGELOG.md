@@ -1,6 +1,22 @@
 # Changelog
 Every iteration of GrabKit gets an entry here (newest first).
 
+## [0.1.6] - 2026-10-21
+### Fixed
+- TikTok short links (`vt.tiktok.com/...`) failing. Share links resolve to URLs with tracking params; TikTok URLs are now rebuilt to the plain `https://www.tiktok.com/@user/video/<id>` form before fetching.
+### Added
+- Extra TikTok routes: the page fetch retries with a mobile Chrome fingerprint, and a new embed-page extractor (`/embed/v2/<id>`) runs before the dead mobile-feed route.
+- "No embedded data" errors now report page size and whether a captcha/verification wall was served.
+### Known limitations
+- Untested against live TikTok. If the `vt.` link still fails, the error text now says whether TikTok served a verification wall.
+
+## [0.1.5] - 2026-10-20
+### Changed
+- Launch scripts start uvicorn with `--reload --reload-dir app`, so replacing files restarts the server automatically. Previously new HTML was served by an old Python process, which made fixes look broken.
+- Footer says "Old server code is running" when the backend predates the version endpoint (shown as "vundefined" before).
+### Note
+- No extractor changes. The Facebook video fix from 0.1.4 only takes effect once the server restarts.
+
 ## [0.1.4] - 2026-10-20
 ### Fixed
 - Facebook video still listed as a single image. Facebook URLs shaped like videos (`/videos/`, `/reel/`, `/watch`, `/share/v/`, `fb.watch`) are now always treated as video, even if yt-dlp reports only a thumbnail.

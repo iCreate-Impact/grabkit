@@ -12,7 +12,7 @@ UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like 
 HOSTS = {"youtube": ("youtube.com", "youtu.be"), "tiktok": ("tiktok.com",), "instagram": ("instagram.com",),
          "facebook": ("facebook.com", "fb.watch", "fb.com"), "x": ("twitter.com", "x.com")}
 STD = (1080, 720, 480, 360)
-VERSION = "0.1.4"
+VERSION = "0.1.6"
 CACHE, JOBS, STREAMS = {}, {}, {}
 app = FastAPI(title="GrabKit")
 
@@ -80,11 +80,11 @@ def tiktok_app(url):
     return {"title": a.get("desc") or "TikTok post", "thumb": cover or items[0]["thumb"], "items": items}
 
 
-def page(url, hdrs):
+def page(url, hdrs, imp="chrome"):
     """GET with a real-browser TLS fingerprint when curl_cffi is installed (TikTok blocks plain clients)."""
     try:
         from curl_cffi import requests as cr
-        r = cr.get(url, impersonate="chrome", headers=hdrs, timeout=20, allow_redirects=True)
+        r = cr.get(url, impersonate=imp, headers=hdrs, timeout=20, allow_redirects=True)
         return r.text, {k: v for k, v in r.cookies.items()}
     except ImportError:
         with http() as c:
@@ -102,9 +102,13 @@ def ydl_extra(url):
 
 
 def tiktok_web(url):
-    text, cks = page(url, {"Accept-Language": "en-US,en;q=0.9", "Referer": "https://www.tiktok.com/"})
-    m = re.search(r'<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>(.+?)</script>', text, re.S)
-    if not m: raise AppError("fetch_failed", "no embedded data in page", 502)
+    for imp in ("chrome", "chrome_android"):  # TikTok serves different pages per client
+        text, cks = page(url, {"Accept-Language": "en-US,en;q=0.9", "Referer": "https://www.tiktok.com/"}, imp)
+        m = re.search(r'<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>(.+?)</script>', text, re.S)
+        if m: break
+    if not m:
+        wall = ", verification wall" if re.search(r"captcha|verify", text[:20000], re.I) else ""
+        raise AppError("fetch_failed", f"no embedded data in page ({len(text)} bytes{wall})", 502)
     d = json.loads(m.group(1)).get("__DEFAULT_SCOPE__", {}).get("webapp.video-detail") or {}
     it = (d.get("itemInfo") or {}).get("itemStruct")
     if not it:
@@ -123,9 +127,24 @@ def tiktok_web(url):
     return {"title": it.get("desc") or "TikTok post", "thumb": cover or items[0]["thumb"], "items": items}
 
 
+def tiktok_embed(url):
+    vid = re.search(r"/video/(\d+)", url).group(1)
+    text, cks = page(f"https://www.tiktok.com/embed/v2/{vid}", {"Accept-Language": "en-US,en;q=0.9"})
+    m = re.search(r'<script id="__FRONTITY_CONNECT_STATE__"[^>]*>(.+?)</script>', text, re.S)
+    if not m: raise AppError("fetch_failed", f"embed page had no data ({len(text)} bytes)", 502)
+    data = (json.loads(m.group(1)).get("source") or {}).get("data") or {}
+    vd = next((v["videoData"] for v in data.values() if isinstance(v, dict) and v.get("videoData")), None)
+    inf = (vd or {}).get("itemInfos") or {}; v = inf.get("video") or {}
+    if not v.get("urls"): raise AppError("fetch_failed", "embed had no video URL", 502)
+    hdr = {"Cookie": "; ".join(f"{k}={x}" for k, x in cks.items()), "Referer": "https://www.tiktok.com/"}
+    cover = (inf.get("coversOrigin") or [None])[0]
+    return {"title": inf.get("text") or "TikTok post", "thumb": cover, "items": [{"type": "video", "thumb": cover, "sources": [
+        {"h": (v.get("videoMeta") or {}).get("height", 0), "url": v["urls"][0], "hdr": hdr}]}]}
+
+
 def tiktok(url):  # web page (clean playAddr) -> mobile feed; resolve() then falls back to yt-dlp
     errs = []
-    for f in (tiktok_web, tiktok_app):
+    for f in (tiktok_web, tiktok_embed, tiktok_app):
         try: return f(url)
         except AppError as e:
             if e.code == "private": raise
@@ -240,10 +259,21 @@ def normalize(url):
     return url
 
 
+def canon(url):
+    """Share links carry tracking params and odd shapes; rebuild the plain TikTok video URL."""
+    u = urlparse(url)
+    if (u.hostname or "").endswith("tiktok.com"):
+        m = re.search(r"/(@[\w.\-]+)/(video|photo)/(\d+)", u.path)
+        if m: return f"https://www.tiktok.com/{m.group(1)}/{m.group(2)}/{m.group(3)}"
+        m = re.search(r"/v/(\d+)", u.path)
+        if m: return f"https://www.tiktok.com/@_/video/{m.group(1)}"
+    return url
+
+
 def resolve(url):
     orig = url.strip(); hit = CACHE.get(orig)  # metadata only, never media
     if hit and time.time() - hit[0] < 600: return hit[1]
-    url = normalize(orig); p = detect(url)
+    url = canon(normalize(orig)); p = detect(url)
     try:
         res = ytdlp_info(url) if p == "youtube" else {**DIRECT[p](url), "engine": "direct"}
     except Exception as e:

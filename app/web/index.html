@@ -65,5 +65,5 @@ async function run(c,url,d,ext,quality,idx){const bar=c.querySelector('.pg'),fil
   set(100,'Done')}catch(e){er.textContent=e.message;er.hidden=false;st.textContent=''}b.disabled=false}
 const H=JSON.parse(sessionStorage.getItem('gk')||'[]');function hist(n,p,s){H.unshift({n,p,s,t:new Date().toLocaleTimeString()});sessionStorage.setItem('gk',JSON.stringify(H.slice(0,50)));drawH()}
 function drawH(){$('#hh').hidden=!H.length;$('#hist').innerHTML=H.map(h=>`<div class="hi"><span class="badge ${h.p}">${NM[h.p]}</span><b title="${esc(h.n)}">${esc(h.n)}</b><span class="mu">${(h.s/1048576).toFixed(1)} MB · ${h.t}</span></div>`).join('')}drawH();
-fetch('/api/health').then(r=>r.json()).then(j=>{$('#ver').textContent='GrabKit v'+j.version+(j.ffmpeg?'':' · ffmpeg not found: mp3, jpg and webp will fail')}).catch(()=>{});
+fetch('/api/health').then(r=>r.json()).then(j=>{$('#ver').textContent=(j.version?'GrabKit v'+j.version:'Old server code is running: stop it (Ctrl+C) and start it again')+(j.ffmpeg?'':' · ffmpeg not found: mp3, jpg and webp will fail')}).catch(()=>{});
 </script></body></html>
