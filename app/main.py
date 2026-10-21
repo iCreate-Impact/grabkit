@@ -1,6 +1,6 @@
 """GrabKit backend. Stateless: temp files live only for the active job."""
 import glob, html as htmllib, json, os, re, shutil, subprocess, tempfile, threading, time, uuid
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 import httpx, yt_dlp
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
@@ -12,7 +12,19 @@ UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like 
 HOSTS = {"youtube": ("youtube.com", "youtu.be"), "tiktok": ("tiktok.com",), "instagram": ("instagram.com",),
          "facebook": ("facebook.com", "fb.watch", "fb.com"), "x": ("twitter.com", "x.com")}
 STD = (1080, 720, 480, 360)
-VERSION = "0.1.6"
+VERSION = "0.1.10"
+# Optional: a Netscape-format cookies.txt exported from YOUR logged-in browser, for age-restricted/login-only posts.
+COOKIES = os.environ.get("GRABKIT_COOKIES") or os.path.join(os.getcwd(), "cookies.txt")
+
+
+def cookie_header(host):
+    if not os.path.isfile(COOKIES): return ""
+    out = []
+    for line in open(COOKIES, encoding="utf-8", errors="ignore"):
+        line = line[10:] if line.startswith("#HttpOnly_") else line
+        p = line.rstrip("\n").split("\t")
+        if len(p) == 7 and host.endswith(p[0].lstrip(".")): out.append(f"{p[5]}={p[6]}")
+    return "; ".join(out)
 CACHE, JOBS, STREAMS = {}, {}, {}
 app = FastAPI(title="GrabKit")
 
@@ -94,16 +106,32 @@ def page(url, hdrs, imp="chrome"):
 
 def ydl_extra(url):
     if "youtu" in url: return {}
+    o = {"cookiefile": COOKIES} if os.path.isfile(COOKIES) else {}
     try:
         import curl_cffi  # noqa: F401
         from yt_dlp.networking.impersonate import ImpersonateTarget
-        return {"impersonate": ImpersonateTarget("chrome")}
-    except Exception: return {}
+        o["impersonate"] = ImpersonateTarget("chrome")
+    except Exception: pass
+    return o
+
+
+def play_urls(o, path=""):
+    """Collect every http URL stored under a key path containing 'play' (layouts vary between TikTok page versions)."""
+    out = []
+    if isinstance(o, dict):
+        for k, x in o.items(): out += play_urls(x, f"{path}.{k}")
+    elif isinstance(o, list):
+        for x in o: out += play_urls(x, path)
+    elif isinstance(o, str) and o.startswith("http") and "play" in path.lower():
+        out.append((path.lower(), o))
+    return out
 
 
 def tiktok_web(url):
     for imp in ("chrome", "chrome_android"):  # TikTok serves different pages per client
-        text, cks = page(url, {"Accept-Language": "en-US,en;q=0.9", "Referer": "https://www.tiktok.com/"}, imp)
+        hd = {"Accept-Language": "en-US,en;q=0.9", "Referer": "https://www.tiktok.com/"}
+        if cookie_header("www.tiktok.com"): hd["Cookie"] = cookie_header("www.tiktok.com")
+        text, cks = page(url, hd, imp)
         m = re.search(r'<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>(.+?)</script>', text, re.S)
         if m: break
     if not m:
@@ -114,15 +142,23 @@ def tiktok_web(url):
     if not it:
         if d.get("statusCode"): raise AppError("private", "This TikTok is private, removed, or region-locked.", 403)
         raise AppError("fetch_failed", "page had no video item", 502)
-    hdr = {"Cookie": "; ".join(f"{k}={v}" for k, v in cks.items()), "Referer": "https://www.tiktok.com/"}  # CDN needs page cookies
+    hdr = {"Cookie": "; ".join(filter(None, [cookie_header("www.tiktok.com"), "; ".join(f"{k}={x}" for k, x in cks.items())])), "Referer": "https://www.tiktok.com/"}  # CDN needs page cookies
     v = it.get("video") or {}; cover = v.get("cover") or v.get("originCover")
     imgs = (it.get("imagePost") or {}).get("images")
     if imgs:
         items = [{"type": "image", "thumb": i["imageURL"]["urlList"][0],
                   "sources": [{"h": 0, "url": i["imageURL"]["urlList"][0], "hdr": hdr}]} for i in imgs]
     else:
-        u = v.get("playAddr") or next(iter(((v.get("bitrateInfo") or [{}])[0].get("PlayAddr") or {}).get("UrlList") or []), None)
-        if not u: raise AppError("fetch_failed", "no playable URL", 502)
+        cands = sorted(play_urls(v), key=lambda t: ("download" in t[0]) * 2 + ("playapi" in t[0]))  # watermarked/API last
+        if not cands:
+            if it.get("isContentClassified"):  # creator enabled audience controls: TikTok withholds the video from logged-out viewers
+                msg = "This creator turned on audience controls, so TikTok requires a login to view this video. It can't be downloaded without one."
+                msg += (" Your cookies.txt didn't unlock it (expired, or that account can't view it)." if os.path.isfile(COOKIES)
+                        else " Optional: add your own cookies.txt (see README) to use your login.")
+                raise AppError("login_required", msg, 403)
+            flags = {k: it.get(k) for k in ("privateItem", "secret", "isContentClassified", "isReviewing") if k in it}
+            raise AppError("fetch_failed", f"TikTok sent this post without video data (restricted or login-only?) {flags or ''} [{d.get('statusMsg') or d.get('statusCode')}]", 502)
+        u = cands[0][1]
         items = [{"type": "video", "thumb": cover, "sources": [{"h": v.get("height", 0), "url": u, "hdr": hdr}]}]
     return {"title": it.get("desc") or "TikTok post", "thumb": cover or items[0]["thumb"], "items": items}
 
@@ -147,10 +183,10 @@ def tiktok(url):  # web page (clean playAddr) -> mobile feed; resolve() then fal
     for f in (tiktok_web, tiktok_embed, tiktok_app):
         try: return f(url)
         except AppError as e:
-            if e.code == "private": raise
+            if e.code in ("private", "login_required"): raise
             errs.append(f"{f.__name__}: {e.message}")
         except Exception as e: errs.append(f"{f.__name__}: {type(e).__name__} {e}")
-    raise AppError("fetch_failed", "; ".join(errs)[:200], 502)
+    raise AppError("fetch_failed", f"{url} -> " + "; ".join(errs)[:200], 502)
 
 
 def ig_node(n):
@@ -259,11 +295,26 @@ def normalize(url):
     return url
 
 
+def tiktok_fix(url):
+    """Share links often resolve to tiktok.com/@/video/<id> (empty handle), which TikTok answers with a video-less stub.
+    oEmbed (public, no login) returns the real author handle for the id, so rebuild the proper URL."""
+    m = re.search(r"/(@[\w.\-]*)/(video|photo)/(\d+)", url)
+    if m and m.group(1) not in ("@", "@_"): return url
+    i = re.search(r"/(?:video|photo|v)/(\d+)", url)
+    if not i: return url
+    try:
+        text, _ = page("https://www.tiktok.com/oembed?url=" + quote(f"https://www.tiktok.com/@_/video/{i.group(1)}", safe=""), {})
+        h = json.loads(text).get("author_unique_id")
+        if h: return f"https://www.tiktok.com/@{h}/{m.group(2) if m else 'video'}/{i.group(1)}"
+    except Exception: pass
+    return url
+
+
 def canon(url):
     """Share links carry tracking params and odd shapes; rebuild the plain TikTok video URL."""
     u = urlparse(url)
     if (u.hostname or "").endswith("tiktok.com"):
-        m = re.search(r"/(@[\w.\-]+)/(video|photo)/(\d+)", u.path)
+        m = re.search(r"/(@[\w.\-]*)/(video|photo)/(\d+)", u.path)
         if m: return f"https://www.tiktok.com/{m.group(1)}/{m.group(2)}/{m.group(3)}"
         m = re.search(r"/v/(\d+)", u.path)
         if m: return f"https://www.tiktok.com/@_/video/{m.group(1)}"
@@ -274,6 +325,7 @@ def resolve(url):
     orig = url.strip(); hit = CACHE.get(orig)  # metadata only, never media
     if hit and time.time() - hit[0] < 600: return hit[1]
     url = canon(normalize(orig)); p = detect(url)
+    if p == "tiktok": url = tiktok_fix(url)
     try:
         res = ytdlp_info(url) if p == "youtube" else {**DIRECT[p](url), "engine": "direct"}
     except Exception as e:

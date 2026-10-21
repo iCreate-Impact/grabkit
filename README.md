@@ -8,6 +8,9 @@ Requires Python 3.10+ and **ffmpeg** on PATH (mp3, merging, jpg/webp conversion)
 ## Use
 Paste one or more links (one per line) and press Enter. Pick format and quality per card, tick the carousel items you want, download.
 
+## Restricted posts (optional cookies)
+Age-restricted or login-only posts (TikTok, Instagram and others) come back without video data when you're logged out. To use your own session: export a Netscape-format `cookies.txt` from your logged-in browser (any "cookies.txt" export extension) and save it next to `run.sh`, or point `GRABKIT_COOKIES` at it. It stays on your machine and is used only for non-YouTube platforms. It grants access to your account, so keep it private and never share the folder with it inside. yt-dlp may update the file as it runs.
+
 ## Layout
 - `app/main.py` - API, extractors, job runner
 - `app/web/index.html` - UI

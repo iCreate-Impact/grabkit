@@ -1,6 +1,36 @@
 # Changelog
 Every iteration of GrabKit gets an entry here (newest first).
 
+## [0.1.10] - 2026-10-21
+### Changed
+- TikTok posts with creator "audience controls" (TikTok shows "Log in to TikTok" and sends no video data to logged-out viewers; flagged `isContentClassified`) now return a clear message: login is required, so it can't be downloaded without one. Other fallbacks are skipped for this case since they hit the same wall. Mentions the optional `cookies.txt` route.
+### Notes
+- Confirmed on the vt.tiktok.com test link: the 0.1.9 handle lookup worked (`@cherishmeeeeee`), and the real cause was the login gate.
+
+## [0.1.9] - 2026-10-21
+### Fixed
+- TikTok `vt.` short link: share links can resolve to `tiktok.com/@/video/<id>` (empty handle). TikTok answers that with a stub (post metadata, no video), which both the native extractor and yt-dlp saw. URL cleanup now accepts an empty handle, and the real author handle is looked up via TikTok's public oEmbed endpoint (no login, no cookies) before fetching.
+### Changed
+- TikTok failure messages now include the exact URL that was fetched, so a remaining failure shows what was requested.
+### Known limitations
+- Untested against live TikTok. If oEmbed is unavailable the URL is left as-is.
+
+## [0.1.8] - 2026-10-21
+### Added
+- Optional `cookies.txt` support (project folder, or `GRABKIT_COOKIES`): passed to yt-dlp and the TikTok page/CDN requests so login-only posts can be fetched with the user's own session. Not required; not used for YouTube.
+### Changed
+- The TikTok "no video data" case (post metadata present, `video` empty, as logged for the vt.tiktok.com link) now says the post is likely restricted or login-only and shows TikTok's flags/status instead of a bare key list.
+### Known limitations
+- Cookie route untested live. Cookies expire; re-export if it stops working.
+
+## [0.1.7] - 2026-10-21
+### Fixed
+- TikTok `vt.` link: the page now loads, but extraction failed with "no playable URL" because the video URL wasn't in the one spot checked. All URLs under any `play*` key are now collected (clean `playAddr` first, `downloadAddr` and `playApi` last).
+### Changed
+- If no URL is found, the error lists the page's video keys, so the next fix can target the real layout.
+### Known limitations
+- Still untested against live TikTok. Some videos (age-restricted, region-locked) may expose no URL without a login.
+
 ## [0.1.6] - 2026-10-21
 ### Fixed
 - TikTok short links (`vt.tiktok.com/...`) failing. Share links resolve to URLs with tracking params; TikTok URLs are now rebuilt to the plain `https://www.tiktok.com/@user/video/<id>` form before fetching.
